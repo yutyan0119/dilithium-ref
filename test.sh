@@ -1,0 +1,1 @@
+cargo test --package pqc_dilithium --test integration --features mode5 -- sign_then_verify_valid --exact --nocapture
