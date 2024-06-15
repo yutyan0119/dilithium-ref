@@ -34,8 +34,8 @@ pub fn pack_sk(
   sk[idx..idx + SEEDBYTES].copy_from_slice(&key[0..SEEDBYTES]);
   idx += SEEDBYTES;
   // TODO: trのサイズ変える
-  sk[idx..idx + SEEDBYTES].copy_from_slice(&tr[0..SEEDBYTES]);
-  idx += SEEDBYTES;
+  sk[idx..idx + CRHBYTES].copy_from_slice(&tr[0..CRHBYTES]);
+  idx += CRHBYTES;
 
   for i in 0..L {
     polyeta_pack(&mut sk[idx + i * POLYETA_PACKEDBYTES..], &s1.vec[i]);
@@ -70,8 +70,8 @@ pub fn unpack_sk(
   key[..SEEDBYTES].copy_from_slice(&sk[idx..idx + SEEDBYTES]);
   idx += SEEDBYTES;
 
-  tr[..SEEDBYTES].copy_from_slice(&sk[idx..idx + SEEDBYTES]);
-  idx += SEEDBYTES;
+  tr[..CRHBYTES].copy_from_slice(&sk[idx..idx + CRHBYTES]);
+  idx += CRHBYTES;
 
   for i in 0..L {
     polyeta_unpack(&mut s1.vec[i], &sk[idx + i * POLYETA_PACKEDBYTES..]);
@@ -93,10 +93,10 @@ pub fn pack_sig(sig: &mut [u8], c: Option<&[u8]>, z: &Polyvecl, h: &Polyveck) {
   let mut idx = 0usize;
 
   if let Some(challenge) = c {
-    sig[..SEEDBYTES].copy_from_slice(&challenge[..SEEDBYTES]);
+    sig[..LAMBDA*2].copy_from_slice(&challenge[..LAMBDA*2]);
   }
 
-  idx += SEEDBYTES;
+  idx += LAMBDA*2;
 
   for i in 0..L {
     polyz_pack(&mut sig[idx + i * POLYZ_PACKEDBYTES..], &z.vec[i]);
@@ -126,8 +126,8 @@ pub fn unpack_sig(
 ) -> Result<(), SignError> {
   let mut idx = 0usize;
 
-  c[..SEEDBYTES].copy_from_slice(&sig[..SEEDBYTES]);
-  idx += SEEDBYTES;
+  c[..2*LAMBDA].copy_from_slice(&sig[..2*LAMBDA]);
+  idx += 2*LAMBDA;
 
   for i in 0..L {
     polyz_unpack(&mut z.vec[i], &sig[idx + i * POLYZ_PACKEDBYTES..]);

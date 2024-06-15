@@ -15,7 +15,7 @@ pub fn crypto_sign_keypair(
   };
   println!("init_seed : {:?}", init_seed);
   let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
-  let mut tr = [0u8; SEEDBYTES];
+  let mut tr = [0u8; CRHBYTES];
   let (mut rho, mut rhoprime, mut key) =
     ([0u8; SEEDBYTES], [0u8; CRHBYTES], [0u8; SEEDBYTES]);
   let mut mat = [Polyvecl::default(); K];
@@ -67,7 +67,7 @@ pub fn crypto_sign_keypair(
   // Compute H(rho, t1) and write secret key
   // TODO: ここのtrの長さがFIPS204と異なるので変更必要あり
   // println!("PUBLICKEYBYTES: {:?}", PUBLICKEYBYTES);
-  shake256(&mut tr, SEEDBYTES, pk, PUBLICKEYBYTES);
+  shake256(&mut tr, CRHBYTES, pk, PUBLICKEYBYTES);
   pack_sk(sk, &rho, &tr, &key, &t0, &s1, &s2);
 
   return 0;
@@ -75,7 +75,7 @@ pub fn crypto_sign_keypair(
 
 pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
   // `key` and `mu` are concatenated
-  let mut keymu = [0u8; SEEDBYTES + CRHBYTES];
+  let mut keymu = [0u8; SEEDBYTES*2 + CRHBYTES];
 
   let mut nonce = 0u16;
   let mut mat = [Polyvecl::default(); K];
@@ -86,7 +86,8 @@ pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
   let mut cp = Poly::default();
   let mut state = KeccakState::default(); //shake256_init()
   let mut rho = [0u8; SEEDBYTES];
-  let mut tr = [0u8; SEEDBYTES];
+  let mut tr = [0u8; CRHBYTES];
+  let mut random_bytes = [0u8; SEEDBYTES];
   let mut rhoprime = [0u8; CRHBYTES];
 
   unpack_sk(
@@ -100,18 +101,18 @@ pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
   );
 
   // Compute CRH(tr, msg)
-  shake256_absorb(&mut state, &tr, SEEDBYTES);
+  shake256_absorb(&mut state, &tr, CRHBYTES);
   shake256_absorb(&mut state, m, m.len());
   shake256_finalize(&mut state);
-  shake256_squeeze(&mut keymu[SEEDBYTES..], CRHBYTES, &mut state);
+  shake256_squeeze(&mut keymu[SEEDBYTES*2..], CRHBYTES, &mut state);
 
   //TODO: ここFIPS204では異なるので変更必要あり
   if RANDOMIZED_SIGNING {
-    randombytes(&mut rhoprime, CRHBYTES);
-  } else {
-    shake256(&mut rhoprime, CRHBYTES, &keymu, SEEDBYTES + CRHBYTES);
+    randombytes(&mut random_bytes, SEEDBYTES);
   }
-
+  keymu[SEEDBYTES..SEEDBYTES*2].copy_from_slice(&random_bytes);
+  println!("keymu: {:?}", keymu);
+  shake256(&mut rhoprime, CRHBYTES, &keymu, SEEDBYTES*2 + CRHBYTES);
   // Expand matrix and transform vectors
   polyvec_matrix_expand(&mut mat, &rho);
   polyvecl_ntt(&mut s1);
@@ -137,10 +138,10 @@ pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
 
     state.init();
     // TODO: ここもFIPS204と異なる
-    shake256_absorb(&mut state, &keymu[SEEDBYTES..], CRHBYTES);
+    shake256_absorb(&mut state, &keymu[SEEDBYTES*2..], CRHBYTES);
     shake256_absorb(&mut state, &sig, K * POLYW1_PACKEDBYTES);
     shake256_finalize(&mut state);
-    shake256_squeeze(sig, SEEDBYTES, &mut state);
+    shake256_squeeze(sig, 2*LAMBDA, &mut state);
     poly_challenge(&mut cp, sig);
     poly_ntt(&mut cp);
 
@@ -191,8 +192,8 @@ pub fn crypto_sign_verify(
   let mut buf = [0u8; K * POLYW1_PACKEDBYTES];
   let mut rho = [0u8; SEEDBYTES];
   let mut mu = [0u8; CRHBYTES];
-  let mut c = [0u8; SEEDBYTES];
-  let mut c2 = [0u8; SEEDBYTES];
+  let mut c = [0u8; 2*LAMBDA];
+  let mut c2 = [0u8; 2*LAMBDA];
   let mut cp = Poly::default();
   let (mut mat, mut z) = ([Polyvecl::default(); K], Polyvecl::default());
   let (mut t1, mut w1, mut h) = (
@@ -215,8 +216,8 @@ pub fn crypto_sign_verify(
   }
 
   // Compute CRH(CRH(rho, t1), msg)
-  shake256(&mut mu, SEEDBYTES, pk, PUBLICKEYBYTES);
-  shake256_absorb(&mut state, &mu, SEEDBYTES);
+  shake256(&mut mu, CRHBYTES, pk, PUBLICKEYBYTES);
+  shake256_absorb(&mut state, &mu, CRHBYTES);
   shake256_absorb(&mut state, m, m.len());
   shake256_finalize(&mut state);
   shake256_squeeze(&mut mu, CRHBYTES, &mut state);
@@ -248,7 +249,7 @@ pub fn crypto_sign_verify(
   shake256_absorb(&mut state, &mu, CRHBYTES);
   shake256_absorb(&mut state, &buf, K * POLYW1_PACKEDBYTES);
   shake256_finalize(&mut state);
-  shake256_squeeze(&mut c2, SEEDBYTES, &mut state);
+  shake256_squeeze(&mut c2, 2*LAMBDA, &mut state);
   // Doesn't require constant time equality check
   if c != c2 {
     Err(SignError::Verify)

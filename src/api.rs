@@ -44,8 +44,8 @@ impl Keypair {
     let mut public = [0u8; PUBLICKEYBYTES];
     let mut secret = [0u8; SECRETKEYBYTES];
     let seed = [0u8; SEEDBYTES];
-    // crypto_sign_keypair(&mut public, &mut secret, Some(&seed));
-    crypto_sign_keypair(&mut public, &mut secret, None);
+    crypto_sign_keypair(&mut public, &mut secret, Some(&seed));
+    // crypto_sign_keypair(&mut public, &mut secret, None);
     println!("generated keypair public: {:?}", public);
     println!("generated keypair secret: {:?}", secret);
     Keypair { public, secret }
