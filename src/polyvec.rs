@@ -116,6 +116,9 @@ pub fn polyvecl_pointwise_acc_montgomery(
   for i in 1..L {
     poly_pointwise_montgomery(&mut t, &u.vec[i], &v.vec[i]);
     poly_add(w, &t);
+    for j in 0..N {
+      w.coeffs[j] = w.coeffs[j] % Q as i32;
+    }
   }
 }
 

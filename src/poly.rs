@@ -43,7 +43,8 @@ pub fn poly_add(c: &mut Poly, b: &Poly) {
 /// performed.
 pub fn poly_sub(c: &mut Poly, b: &Poly) {
   for i in 0..N {
-    c.coeffs[i] = c.coeffs[i] - b.coeffs[i];
+    c.coeffs[i] = (c.coeffs[i] - b.coeffs[i] + 2*Q as i32) % Q as i32;
+    assert!(c.coeffs[i] >= 0 && c.coeffs[i] < Q as i32, "c: {}", c.coeffs[i]);
   }
 }
 
@@ -183,10 +184,12 @@ pub fn poly_uniform(a: &mut Poly, seed: &[u8], nonce: u16) {
 
   stream128_init(&mut state, seed, nonce);
   stream128_squeezeblocks(&mut buf, POLY_UNIFORM_NBLOCKS as u64, &mut state);
-
+  // println!("buf: {:?}", buf);
   let mut ctr = rej_uniform(&mut a.coeffs, N_U32, &mut buf, buflen);
   let mut off;
+  let mut count = 0;
   while ctr < N_U32 {
+    count += 1;
     off = buflen % 3;
     for i in 0..off {
       buf[i] = buf[buflen - off + i];
@@ -200,6 +203,8 @@ pub fn poly_uniform(a: &mut Poly, seed: &[u8], nonce: u16) {
       buflen,
     );
   }
+  // println!("count: {}", count);
+  // println!("a: {:?}", a.coeffs);
 }
 
 /// Sample uniformly random coefficients in [-ETA, ETA] by
@@ -216,20 +221,32 @@ pub fn rej_eta(a: &mut [i32], len: usize, buf: &[u8], buflen: usize) -> u32 {
       if t0 < 15 {
         t0 = t0 - (205 * t0 >> 10) * 5;
         a[ctr] = 2 - t0 as i32;
+        // if a[ctr] < 0 {
+        //   a[ctr] = a[ctr] + Q as i32;
+        // }
         ctr += 1;
       }
       if t1 < 15 && ctr < len {
         t1 = t1 - (205 * t1 >> 10) * 5;
         a[ctr] = 2 - t1 as i32;
+        // if a[ctr] < 0 {
+        //   a[ctr] = a[ctr] + Q as i32;
+        // }
         ctr += 1;
       }
     } else if ETA == 4 {
       if t0 < 9 {
         a[ctr] = 4 - t0 as i32;
+        // if a[ctr] < 0 {
+        //   a[ctr] = a[ctr] + Q as i32;
+        // }
         ctr += 1;
       }
       if t1 < 9 && ctr < len {
         a[ctr] = 4 - t1 as i32;
+        // if a[ctr] < 0 {
+        //   a[ctr] = a[ctr] + Q as i32;
+        // }
         ctr += 1;
       }
     }
@@ -256,10 +273,11 @@ pub fn poly_uniform_eta(a: &mut Poly, seed: &[u8], nonce: u16) {
     POLY_UNIFORM_ETA_NBLOCKS as u64,
     &mut state,
   );
-
+  // println!("buf : {:?}", buf);
   let mut ctr = rej_eta(&mut a.coeffs, N, &buf, buflen);
-
+  let mut count = 0;
   while ctr < N_U32 {
+    count += 1;
     stream256_squeezeblocks(&mut buf, 1, &mut state);
     ctr += rej_eta(
       &mut a.coeffs[ctr as usize..],
@@ -268,6 +286,8 @@ pub fn poly_uniform_eta(a: &mut Poly, seed: &[u8], nonce: u16) {
       STREAM256_BLOCKBYTES,
     );
   }
+  // println!("a: {:?}", a.coeffs);
+  // println!("count: {}", count);
 }
 
 const POLY_UNIFORM_GAMMA1_NBLOCKS: usize =
@@ -280,14 +300,18 @@ const POLY_UNIFORM_GAMMA1_NBLOCKS: usize =
 pub fn poly_uniform_gamma1(a: &mut Poly, seed: &[u8], nonce: u16) {
   let mut buf = [0u8; POLY_UNIFORM_GAMMA1_NBLOCKS * STREAM256_BLOCKBYTES];
   let mut state = Stream256State::default();
-
+  // println!("seed: {:?}", seed);
+  // println!("nonce: {:?}", nonce);
   stream256_init(&mut state, seed, nonce);
+  // println!("state: {:?}", state.s);
   stream256_squeezeblocks(
     &mut buf,
     POLY_UNIFORM_GAMMA1_NBLOCKS as u64,
     &mut state,
   );
+  // println!("buf: {:?}", buf);
   polyz_unpack(a, &mut buf);
+  // println!("a: {:?}", a.coeffs);
 }
 
 /// Implementation of H. Samples polynomial with TAU nonzero
@@ -297,7 +321,7 @@ pub fn poly_challenge(c: &mut Poly, seed: &[u8]) {
   let mut _signs = 0u64;
   let mut buf = [0u8; SHAKE256_RATE];
   let mut state = KeccakState::default(); //shake256_init
-
+  // println!("seed: {:?}", seed);
   shake256_absorb(&mut state, seed, SEEDBYTES);
   shake256_finalize(&mut state);
   shake256_squeezeblocks(&mut buf, 1, &mut state);
@@ -309,22 +333,30 @@ pub fn poly_challenge(c: &mut Poly, seed: &[u8]) {
   // let mut b = buf[pos];
   let mut b;
   c.coeffs.fill(0);
+  let mut count = 0;
+  // println!("buf: {:?}", buf);
   for i in N - TAU..N {
     loop {
+      count += 1;
       if pos >= SHAKE256_RATE {
+        // println!("bingo!");
         shake256_squeezeblocks(&mut buf, 1, &mut state);
         pos = 0;
       }
       b = buf[pos] as usize;
       pos += 1;
       if b <= i {
+        // println!("ok!");
         break;
       }
+      // println!("ng!");
     }
     c.coeffs[i] = c.coeffs[b as usize];
     c.coeffs[b as usize] = 1i32 - 2 * (_signs & 1) as i32;
     _signs >>= 1;
   }
+  // println!("count: {}", count);
+  // println!("c: {:?}", c.coeffs);
 }
 
 /// Bit-pack polynomial with coefficients in [-ETA,ETA].
@@ -603,7 +635,7 @@ pub fn polyz_unpack(r: &mut Poly, a: &[u8]) {
 /// Bit-pack polynomial w1 with coefficients in [0, 15].
 /// Input coefficients are assumed to be standard representatives.
 pub fn polyw1_pack(r: &mut [u8], a: &Poly) {
-  if GAMMA2 == (Q - 1) / 88 {
+  if GAMMA2 == (Q - 1) / 88 { // 1係数あたり6bit
     for i in 0..N / 4 {
       r[3 * i + 0] = a.coeffs[4 * i + 0] as u8;
       r[3 * i + 0] |= (a.coeffs[4 * i + 1] << 6) as u8;
@@ -613,7 +645,7 @@ pub fn polyw1_pack(r: &mut [u8], a: &Poly) {
       r[3 * i + 2] |= (a.coeffs[4 * i + 3] << 2) as u8;
     }
   } else {
-    for i in 0..N / 2 {
+    for i in 0..N / 2 { // 1係数あたり4bit
       r[i] = (a.coeffs[2 * i + 0] | (a.coeffs[2 * i + 1] << 4)) as u8;
     }
   }

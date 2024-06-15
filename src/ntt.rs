@@ -55,14 +55,22 @@ pub fn ntt(a: &mut [i32]) {
       zeta = ZETAS[k] as i64;
       j = start;
       while j < (start + len) {
+        // print!("a[{}] = {}, a[{}] = {}, zeta = {} to ",j, (a[j] + Q as i32) % Q as i32, j+len, (a[j + len] + Q as i32) % Q as i32, (zeta + Q as i64) % Q as i64);
         t = montgomery_reduce(zeta * a[j + len] as i64);
+        // print!("t = {} ", if t < 0  {t + Q as i32} else {t});
         a[j + len] = a[j] - t;
         a[j] += t;
+        // println!("a[{}] = {}, a[{}] = {}", j, (a[j] + Q as i32) % Q as i32 , j+len, (a[j + len] + Q as i32) % Q as i32);
+        // println!("a[{}] = {}, a[{}] = {}", j, a[j], j+len, a[j + len]);
+        // これ復活させること！！
+        a[j] = (a[j] + Q as i32) % Q as i32;
+        a[j + len] = (a[j + len] + Q as i32) % Q as i32;
         j += 1;
       }
       start = j + len;
     }
     len >>= 1;
+    // println!("a = {:?}", a);
   }
 }
 
@@ -89,19 +97,25 @@ pub fn invntt_tomont(a: &mut [i32]) {
       zeta = -ZETAS[k] as i64;
       j = start;
       while j < (start + len) {
+        // print!("a[{}] = {}, a[{}] = {}, zeta{} = {} to ",j, (a[j] + Q as i32) % Q as i32, j+len, (a[j + len] + Q as i32) % Q as i32, k, (zeta + Q as i64) % Q as i64);
         t = a[j];
         a[j] = t + a[j + len];
+        a[j] = a[j] % Q as i32;
         a[j + len] = t - a[j + len];
+        a[j + len] = (a[j + len] + Q as i32) % Q as i32;
         a[j + len] = montgomery_reduce(zeta * a[j + len] as i64);
+        // println!("a[{}] = {}, a[{}] = {}", j, (a[j] + Q as i32) % Q as i32 , j+len, (a[j + len] + Q as i32) % Q as i32);
         j += 1
       }
       start = j + len;
     }
     len <<= 1;
   }
+  // println!("a = {:?}", a);
   for j in 0..N {
     a[j] = montgomery_reduce(F * a[j] as i64);
   }
+  // println!("a = {:?}", a);
 }
 
 mod tests {

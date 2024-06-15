@@ -33,7 +33,7 @@ pub fn pack_sk(
 
   sk[idx..idx + SEEDBYTES].copy_from_slice(&key[0..SEEDBYTES]);
   idx += SEEDBYTES;
-
+  // TODO: trのサイズ変える
   sk[idx..idx + SEEDBYTES].copy_from_slice(&tr[0..SEEDBYTES]);
   idx += SEEDBYTES;
 

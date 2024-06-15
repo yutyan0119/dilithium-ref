@@ -13,6 +13,7 @@ pub fn crypto_sign_keypair(
     Some(x) => init_seed.copy_from_slice(x),
     None => randombytes(&mut init_seed, SEEDBYTES),
   };
+  println!("init_seed : {:?}", init_seed);
   let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
   let mut tr = [0u8; SEEDBYTES];
   let (mut rho, mut rhoprime, mut key) =
@@ -35,6 +36,8 @@ pub fn crypto_sign_keypair(
   rho.copy_from_slice(&seedbuf[..SEEDBYTES]);
   rhoprime.copy_from_slice(&seedbuf[SEEDBYTES..SEEDBYTES + CRHBYTES]);
   key.copy_from_slice(&seedbuf[SEEDBYTES + CRHBYTES..]);
+  // println!("rho: {:?}", rho);
+  // println!("rhoprime: {:?}", rhoprime);
 
   // Expand matrix
   polyvec_matrix_expand(&mut mat, &rho);
@@ -47,17 +50,23 @@ pub fn crypto_sign_keypair(
   polyvecl_ntt(&mut s1hat);
 
   polyvec_matrix_pointwise_montgomery(&mut t1, &mat, &s1hat);
-  polyveck_reduce(&mut t1);
+  // polyveck_reduce(&mut t1);
   polyveck_invntt_tomont(&mut t1);
 
   // Add error vector s2
   polyveck_add(&mut t1, &s2);
   // Extract t1 and write public key
   polyveck_caddq(&mut t1);
+  // println!("t1.vec[0] {:?}", t1.vec[0].coeffs);
+  // println!("t1.vec[1] {:?}", t1.vec[1].coeffs);
+  // println!("t1.vec[2] {:?}", t1.vec[2].coeffs);
+  // println!("t1.vec[3] {:?}", t1.vec[3].coeffs);
   polyveck_power2round(&mut t1, &mut t0);
   pack_pk(pk, &rho, &t1);
 
   // Compute H(rho, t1) and write secret key
+  // TODO: ここのtrの長さがFIPS204と異なるので変更必要あり
+  // println!("PUBLICKEYBYTES: {:?}", PUBLICKEYBYTES);
   shake256(&mut tr, SEEDBYTES, pk, PUBLICKEYBYTES);
   pack_sk(sk, &rho, &tr, &key, &t0, &s1, &s2);
 
@@ -96,6 +105,7 @@ pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
   shake256_finalize(&mut state);
   shake256_squeeze(&mut keymu[SEEDBYTES..], CRHBYTES, &mut state);
 
+  //TODO: ここFIPS204では異なるので変更必要あり
   if RANDOMIZED_SIGNING {
     randombytes(&mut rhoprime, CRHBYTES);
   } else {
@@ -117,7 +127,7 @@ pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
     let mut z = y;
     polyvecl_ntt(&mut z);
     polyvec_matrix_pointwise_montgomery(&mut w1, &mat, &z);
-    polyveck_reduce(&mut w1);
+    // polyveck_reduce(&mut w1);
     polyveck_invntt_tomont(&mut w1);
 
     // Decompose w and call the random oracle
@@ -126,6 +136,7 @@ pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
     polyveck_pack_w1(sig, &w1);
 
     state.init();
+    // TODO: ここもFIPS204と異なる
     shake256_absorb(&mut state, &keymu[SEEDBYTES..], CRHBYTES);
     shake256_absorb(&mut state, &sig, K * POLYW1_PACKEDBYTES);
     shake256_finalize(&mut state);
@@ -145,7 +156,7 @@ pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
     /* Check that subtracting cs2 does not change high bits of w and low bits
      * do not reveal secret information */
     polyveck_pointwise_poly_montgomery(&mut h, &cp, &s2);
-    polyveck_invntt_tomont(&mut h);
+    polyveck_invntt_tomont(&mut h);//intt(ntt(cs2))
     polyveck_sub(&mut w0, &h);
     polyveck_reduce(&mut w0);
     if polyveck_chknorm(&w0, (GAMMA2 - BETA) as i32) > 0 {
@@ -224,7 +235,7 @@ pub fn crypto_sign_verify(
   polyveck_pointwise_poly_montgomery(&mut t1, &cp, &t1_2);
 
   polyveck_sub(&mut w1, &t1);
-  polyveck_reduce(&mut w1);
+  // polyveck_reduce(&mut w1);
   polyveck_invntt_tomont(&mut w1);
 
   // Reconstruct w1

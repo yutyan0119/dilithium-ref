@@ -19,13 +19,17 @@ pub fn power2round(a: i32, a0: &mut i32) -> i32 {
 ///
 /// Returns a1.
 pub fn decompose(a0: &mut i32, a: i32) -> i32 {
+  // println!("a: {}", a);
   let mut a1 = (a + 127) >> 7;
+  // println!("a1: {}", a1);
   if GAMMA2 == (Q - 1) / 32 {
     a1 = (a1 * 1025 + (1 << 21)) >> 22;
     a1 &= 15;
   } else if GAMMA2 == (Q - 1) / 88 {
     a1 = (a1 * 11275 + (1 << 23)) >> 24;
+    // println!("a1: {}", a1);
     a1 ^= ((43 - a1) >> 31) & a1;
+    // println!("a1: {}", a1);
   }
   *a0 = a - a1 * 2 * GAMMA2_I32;
   *a0 -= (((Q_I32 - 1) / 2 - *a0) >> 31) & Q_I32;
