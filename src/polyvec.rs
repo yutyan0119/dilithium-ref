@@ -45,6 +45,7 @@ pub fn polyvec_matrix_pointwise_montgomery(
   v: &Polyvecl,
 ) {
   for i in 0..K {
+    // println!("K: {}", i);
     polyvecl_pointwise_acc_montgomery(&mut t.vec[i], &mat[i], v);
   }
 }
@@ -113,8 +114,11 @@ pub fn polyvecl_pointwise_acc_montgomery(
 ) {
   let mut t = Poly::default();
   poly_pointwise_montgomery(w, &u.vec[0], &v.vec[0]);
+  // println!("w: {:?}", w.coeffs);
   for i in 1..L {
+    // println!("L: {}", i);
     poly_pointwise_montgomery(&mut t, &u.vec[i], &v.vec[i]);
+    // println!("t: {:?}", t.coeffs);
     poly_add(w, &t);
     for j in 0..N {
       w.coeffs[j] = w.coeffs[j] % Q as i32;

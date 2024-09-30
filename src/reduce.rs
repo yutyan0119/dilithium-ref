@@ -39,7 +39,9 @@ pub fn montgomery_reduce(a: i64) -> i32 {
 // input を -Q/2 < input <= Q/2 にする
 pub fn reduce32(a: i32) -> i32 {
   let t;
-  if a > Q as i32/ 2 {
+  if a > Q as i32 * 3 / 2 {
+    t = a - Q as i32 * 2;
+  } else if a > Q as i32/ 2 {
     t = a - Q as i32;
   } else if a <= -(Q as i32) / 2 {
     t = a + Q as i32;

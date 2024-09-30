@@ -90,6 +90,7 @@ pub fn dilithium_shake128_stream_init(
   shake128_absorb(state, seed, SEEDBYTES);
   shake128_absorb(state, &t, 2);
   shake128_finalize(state);
+  // println!("state: {:?}", state.s);
 }
 
 #[cfg(not(feature = "aes"))]

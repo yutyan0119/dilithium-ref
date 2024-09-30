@@ -184,7 +184,9 @@ pub fn poly_uniform(a: &mut Poly, seed: &[u8], nonce: u16) {
 
   stream128_init(&mut state, seed, nonce);
   stream128_squeezeblocks(&mut buf, POLY_UNIFORM_NBLOCKS as u64, &mut state);
-  // println!("buf: {:?}", buf);
+  // if nonce == 514 {
+  //   println!("mat_buf: {:?}", buf);
+  // }
   let mut ctr = rej_uniform(&mut a.coeffs, N_U32, &mut buf, buflen);
   let mut off;
   let mut count = 0;
@@ -268,12 +270,17 @@ pub fn poly_uniform_eta(a: &mut Poly, seed: &[u8], nonce: u16) {
   let mut buf = [0u8; POLY_UNIFORM_ETA_NBLOCKS * STREAM256_BLOCKBYTES];
   let mut state = Stream256State::default();
   stream256_init(&mut state, seed, nonce);
+  // if nonce == 2 {
+  //   println!("state: {:?}", state.s);
+  // }
   stream256_squeezeblocks(
     &mut buf,
     POLY_UNIFORM_ETA_NBLOCKS as u64,
     &mut state,
   );
-  // println!("buf : {:?}", buf);
+  // if nonce == 2 {
+  //   println!("buf : {:?}", buf);
+  // }
   let mut ctr = rej_eta(&mut a.coeffs, N, &buf, buflen);
   let mut count = 0;
   while ctr < N_U32 {
@@ -321,11 +328,13 @@ pub fn poly_challenge(c: &mut Poly, seed: &[u8]) {
   let mut _signs = 0u64;
   let mut buf = [0u8; SHAKE256_RATE];
   let mut state = KeccakState::default(); //shake256_init
-  // println!("seed: {:?}", seed);
-  shake256_absorb(&mut state, seed, SEEDBYTES);
+  println!("c_tilda_seed: {:?}", seed[..2*LAMBDA as usize].to_vec());
+  // shake256_absorb(&mut state, seed, SEEDBYTES);
+  // 最新版とdraftの違い
+  shake256_absorb(&mut state, seed, 2*LAMBDA as usize);
   shake256_finalize(&mut state);
   shake256_squeezeblocks(&mut buf, 1, &mut state);
-
+  println!("c_buf: {:?}", buf);
   for i in 0..8 {
     _signs |= (buf[i] as u64) << 8 * i;
   }
@@ -356,16 +365,20 @@ pub fn poly_challenge(c: &mut Poly, seed: &[u8]) {
     _signs >>= 1;
   }
   // println!("count: {}", count);
-  // println!("c: {:?}", c.coeffs);
+  for i in 0..N {
+    if c.coeffs[i] < 0 {
+      c.coeffs[i] = c.coeffs[i] + Q as i32;
+    }
+  }
 }
 
 /// Bit-pack polynomial with coefficients in [-ETA,ETA].
 /// Input coefficients are assumed to lie in [Q-ETA,Q+ETA].
 pub fn polyeta_pack(r: &mut [u8], a: &Poly) {
   let mut t = [0u8; 8];
-  if ETA == 2 {
+  if ETA == 2 { // 元は 3bit 24 bitsずつ出力 dilithium 3
     for i in 0..N / 8 {
-      t[0] = (ETA_I32 - a.coeffs[8 * i + 0]) as u8;
+      t[0] = (ETA_I32 - a.coeffs[8 * i + 0]) as u8; // 3 bits 0 - 4
       t[1] = (ETA_I32 - a.coeffs[8 * i + 1]) as u8;
       t[2] = (ETA_I32 - a.coeffs[8 * i + 2]) as u8;
       t[3] = (ETA_I32 - a.coeffs[8 * i + 3]) as u8;
@@ -379,8 +392,8 @@ pub fn polyeta_pack(r: &mut [u8], a: &Poly) {
       r[3 * i + 2] = (t[5] >> 1) | (t[6] << 2) | (t[7] << 5);
     }
   } else {
-    for i in 0..N / 2 {
-      t[0] = (ETA_I32 - a.coeffs[2 * i + 0]) as u8;
+    for i in 0..N / 2 { // ETA = 4 なので元は4bit // 8 bitsずつ出力
+      t[0] = (ETA_I32 - a.coeffs[2 * i + 0]) as u8; // 4 bits 0 - 8
       t[1] = (ETA_I32 - a.coeffs[2 * i + 1]) as u8;
       r[i] = t[0] | (t[1] << 4);
     }
@@ -459,8 +472,8 @@ pub fn polyt1_unpack(r: &mut Poly, a: &[u8]) {
 pub fn polyt0_pack(r: &mut [u8], a: &Poly) {
   let mut t = [0i32; 8];
 
-  for i in 0..N / 8 {
-    t[0] = D_SHL - a.coeffs[8 * i + 0];
+  for i in 0..N / 8 { // 104 bitsずつ出力
+    t[0] = D_SHL - a.coeffs[8 * i + 0]; // 13 bits
     t[1] = D_SHL - a.coeffs[8 * i + 1];
     t[2] = D_SHL - a.coeffs[8 * i + 2];
     t[3] = D_SHL - a.coeffs[8 * i + 3];
@@ -549,8 +562,8 @@ pub fn polyt0_unpack(r: &mut Poly, a: &[u8]) {
 pub fn polyz_pack(r: &mut [u8], a: &Poly) {
   let mut t = [0i32; 4];
   if GAMMA1 == (1 << 17) {
-    for i in 0..N / 4 {
-      t[0] = GAMMA1_I32 - a.coeffs[4 * i + 0];
+    for i in 0..N / 4 { // 72bitずつ出力
+      t[0] = GAMMA1_I32 - a.coeffs[4 * i + 0]; // 18bitの値が入る
       t[1] = GAMMA1_I32 - a.coeffs[4 * i + 1];
       t[2] = GAMMA1_I32 - a.coeffs[4 * i + 2];
       t[3] = GAMMA1_I32 - a.coeffs[4 * i + 3];
@@ -568,9 +581,9 @@ pub fn polyz_pack(r: &mut [u8], a: &Poly) {
       r[9 * i + 7] = (t[3] >> 2) as u8;
       r[9 * i + 8] = (t[3] >> 10) as u8;
     }
-  } else if GAMMA1 == 1 << 19 {
+  } else if GAMMA1 == 1 << 19 { // 40bitずつ出力 x 2 で 80bitずつ出力
     for i in 0..N / 2 {
-      t[0] = GAMMA1_I32 - a.coeffs[2 * i + 0];
+      t[0] = GAMMA1_I32 - a.coeffs[2 * i + 0]; // 20bitの値が入る
       t[1] = GAMMA1_I32 - a.coeffs[2 * i + 1];
 
       r[5 * i + 0] = (t[0]) as u8;
@@ -613,6 +626,20 @@ pub fn polyz_unpack(r: &mut Poly, a: &[u8]) {
       r.coeffs[4 * i + 1] = GAMMA1_I32 - r.coeffs[4 * i + 1];
       r.coeffs[4 * i + 2] = GAMMA1_I32 - r.coeffs[4 * i + 2];
       r.coeffs[4 * i + 3] = GAMMA1_I32 - r.coeffs[4 * i + 3];
+
+      // // こっから追加、負の場合にQを足す
+      if r.coeffs[4 * i + 0] < 0 {
+        r.coeffs[4 * i + 0] = r.coeffs[4 * i + 0] + Q as i32;
+      }
+      if r.coeffs[4 * i + 1] < 0 {
+        r.coeffs[4 * i + 1] = r.coeffs[4 * i + 1] + Q as i32;
+      }
+      if r.coeffs[4 * i + 2] < 0 {
+        r.coeffs[4 * i + 2] = r.coeffs[4 * i + 2] + Q as i32;
+      }
+      if r.coeffs[4 * i + 3] < 0 {
+        r.coeffs[4 * i + 3] = r.coeffs[4 * i + 3] + Q as i32;
+      }
     }
   } else if GAMMA1 == 1 << 19 {
     for i in 0..N / 2 {
@@ -628,6 +655,14 @@ pub fn polyz_unpack(r: &mut Poly, a: &[u8]) {
 
       r.coeffs[2 * i + 0] = GAMMA1_I32 - r.coeffs[2 * i + 0];
       r.coeffs[2 * i + 1] = GAMMA1_I32 - r.coeffs[2 * i + 1];
+
+      // // こっから追加、負の場合にQを足す
+      if r.coeffs[2 * i + 0] < 0 {
+        r.coeffs[2 * i + 0] = r.coeffs[2 * i + 0] + Q as i32;
+      }
+      if r.coeffs[2 * i + 1] < 0 {
+        r.coeffs[2 * i + 1] = r.coeffs[2 * i + 1] + Q as i32;
+      }
     }
   }
 }

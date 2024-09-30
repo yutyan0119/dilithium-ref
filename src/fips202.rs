@@ -341,6 +341,7 @@ fn keccak_absorb(
     }
     inlen -= r - pos;
     keccakf1600_statepermute(&mut state.s);
+    // println!("in keccak absorb: {:?}", state.s);
     pos = 0;
   }
   let mut i = pos;

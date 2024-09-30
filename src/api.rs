@@ -43,11 +43,12 @@ impl Keypair {
   pub fn generate() -> Keypair {
     let mut public = [0u8; PUBLICKEYBYTES];
     let mut secret = [0u8; SECRETKEYBYTES];
-    let seed = [0u8; SEEDBYTES];
+    // let seed = [0u8; SEEDBYTES];
+    let seed = [72, 221, 165, 187, 233, 23, 26, 102, 86, 32, 110, 197, 108, 89, 92, 88, 52, 182, 207, 56, 197, 254, 113, 188, 180, 79, 228, 56, 51, 174, 233, 223];
     crypto_sign_keypair(&mut public, &mut secret, Some(&seed));
     // crypto_sign_keypair(&mut public, &mut secret, None);
-    println!("generated keypair public: {:?}", public);
-    println!("generated keypair secret: {:?}", secret);
+    // println!("generated keypair public: {:?}", public);
+    // println!("generated keypair secret: {:?}", secret);
     Keypair { public, secret }
   }
 
@@ -64,7 +65,7 @@ impl Keypair {
   pub fn sign(&self, msg: &[u8]) -> [u8; SIGNBYTES] {
     let mut sig = [0u8; SIGNBYTES];
     crypto_sign_signature(&mut sig, msg, &self.secret);
-    println!("generated signature: {:?}", sig);
+    // println!("generated signature: {:?}", sig);
     sig
   }
 }
