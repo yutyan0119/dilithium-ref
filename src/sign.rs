@@ -8,11 +8,14 @@ pub fn crypto_sign_keypair(
   sk: &mut [u8],
   seed: Option<&[u8]>,
 ) -> u8 {
-  let mut init_seed = [0u8; SEEDBYTES];
+  // draftとの違い: seedのあとにK, Lを追加
+  let mut init_seed = [0u8; SEEDBYTES + 2];
   match seed {
-    Some(x) => init_seed.copy_from_slice(x),
+    Some(x) => init_seed[..SEEDBYTES].copy_from_slice(x),
     None => randombytes(&mut init_seed, SEEDBYTES),
   };
+  init_seed[SEEDBYTES] = K as u8;
+  init_seed[SEEDBYTES + 1] = L as u8;
   println!("init_seed : {:?}", init_seed);
   let mut seedbuf = [0u8; 2 * SEEDBYTES + CRHBYTES];
   let mut tr = [0u8; CRHBYTES];
@@ -31,43 +34,69 @@ pub fn crypto_sign_keypair(
     &mut seedbuf,
     2 * SEEDBYTES + CRHBYTES,
     &init_seed,
-    SEEDBYTES,
+    SEEDBYTES + 2,
   );
+  println!("seedbuf: {:?}", seedbuf);
   rho.copy_from_slice(&seedbuf[..SEEDBYTES]);
   rhoprime.copy_from_slice(&seedbuf[SEEDBYTES..SEEDBYTES + CRHBYTES]);
   key.copy_from_slice(&seedbuf[SEEDBYTES + CRHBYTES..]);
-  // println!("rho: {:?}", rho);
-  // println!("rhoprime: {:?}", rhoprime);
+  println!("rho: {:?}", rho);
+  println!("rhoprime: {:?}", rhoprime);
 
   // Expand matrix
   polyvec_matrix_expand(&mut mat, &rho);
+  // println!("mat[3].vec[2]: {:?}", mat[3].vec[2].coeffs);
+  println!("mat[0].vec[0]: {:?}", mat[0].vec[0].coeffs);
+  // println!("mat[0].vec[1]: {:?}", mat[0].vec[1].coeffs);
   // Sample short vectors s1 and s2
   polyvecl_uniform_eta(&mut s1, &rhoprime, 0);
+  // s1.vec[0]を16個ずつプリント
+  // println!("s1.vec[0] {:?}", s1.vec[0].coeffs);
+  // println!("s1.vec[1] {:?}", s1.vec[1].coeffs);
+  // println!("s1.vec[2] {:?}", s1.vec[2].coeffs);
+  // println!("s1.vec[6] {:?}", s1.vec[6].coeffs);
   polyveck_uniform_eta(&mut s2, &rhoprime, L_U16);
+  println!("s2.vec[0] {:?}", s2.vec[0].coeffs);
 
   // Matrix-vector multiplication
   let mut s1hat = s1;
   polyvecl_ntt(&mut s1hat);
+  println!("s1hat.vec[0] {:?}", s1hat.vec[0].coeffs);
+  // println!("s1hat.vec[1] {:?}", s1hat.vec[1].coeffs);
+  // println!("s1hat.vec[6] {:?}", s1hat.vec[6].coeffs);
 
   polyvec_matrix_pointwise_montgomery(&mut t1, &mat, &s1hat);
+  println!("t1.vec[0] {:?}", t1.vec[0].coeffs);
+  // println!("t1.vec[5] {:?}", t1.vec[5].coeffs);
   // polyveck_reduce(&mut t1);
   polyveck_invntt_tomont(&mut t1);
+  println!("after intt t1.vec[0] {:?}", t1.vec[0].coeffs);
+  println!("after intt t1.vec[1] {:?}", t1.vec[1].coeffs);
+  // println!("after intt t1.vec[7] {:?}", t1.vec[7].coeffs);
+  println!("s2.vec[1] {:?}", s2.vec[1].coeffs);
 
   // Add error vector s2
   polyveck_add(&mut t1, &s2);
+  println!("after add s2 t1.vec[0] {:?}", t1.vec[0].coeffs);
+  println!("after add s2 t1.vec[1] {:?}", t1.vec[1].coeffs);
+  // println!("after add s2 t1.vec[7] {:?}", t1.vec[7].coeffs);
   // Extract t1 and write public key
   polyveck_caddq(&mut t1);
-  // println!("t1.vec[0] {:?}", t1.vec[0].coeffs);
+  println!("t1.vec[0] {:?}", t1.vec[0].coeffs);
   // println!("t1.vec[1] {:?}", t1.vec[1].coeffs);
   // println!("t1.vec[2] {:?}", t1.vec[2].coeffs);
   // println!("t1.vec[3] {:?}", t1.vec[3].coeffs);
   polyveck_power2round(&mut t1, &mut t0);
+  println!("after power2round t1.vec[0] {:?}", t1.vec[0].coeffs);
+  println!("after power2round t0.vec[0] {:?}", t0.vec[0].coeffs);
   pack_pk(pk, &rho, &t1);
 
   // Compute H(rho, t1) and write secret key
   // TODO: ここのtrの長さがFIPS204と異なるので変更必要あり
   // println!("PUBLICKEYBYTES: {:?}", PUBLICKEYBYTES);
+  // println!("pk: {:?}", pk);
   shake256(&mut tr, CRHBYTES, pk, PUBLICKEYBYTES);
+  // println!("tr: {:?}", tr);
   pack_sk(sk, &rho, &tr, &key, &t0, &s1, &s2);
 
   return 0;
@@ -75,7 +104,7 @@ pub fn crypto_sign_keypair(
 
 pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
   // `key` and `mu` are concatenated
-  let mut keymu = [0u8; SEEDBYTES*2 + CRHBYTES];
+  let mut keymu = [0u8; SEEDBYTES * 2 + CRHBYTES];
 
   let mut nonce = 0u16;
   let mut mat = [Polyvecl::default(); K];
@@ -101,48 +130,113 @@ pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
   );
 
   // Compute CRH(tr, msg)
+  println!("tr: {:?}", tr);
+  println!("m: {:?}", m);
   shake256_absorb(&mut state, &tr, CRHBYTES);
   shake256_absorb(&mut state, m, m.len());
+  // println!("tr: {:?}", tr);
+  // println!("m: {:?}", m);
   shake256_finalize(&mut state);
-  shake256_squeeze(&mut keymu[SEEDBYTES*2..], CRHBYTES, &mut state);
-
+  shake256_squeeze(&mut keymu[SEEDBYTES * 2..], CRHBYTES, &mut state);
+  println!("keymu[SEEDBYTES * 2..]: {:?}", &keymu[SEEDBYTES * 2..]);
   //TODO: ここFIPS204では異なるので変更必要あり
   if RANDOMIZED_SIGNING {
     randombytes(&mut random_bytes, SEEDBYTES);
   }
-  keymu[SEEDBYTES..SEEDBYTES*2].copy_from_slice(&random_bytes);
-  println!("keymu: {:?}", keymu);
-  shake256(&mut rhoprime, CRHBYTES, &keymu, SEEDBYTES*2 + CRHBYTES);
+  keymu[SEEDBYTES..SEEDBYTES * 2].copy_from_slice(&random_bytes);
+  println!("K : {:?}", keymu);
+  shake256(&mut rhoprime, CRHBYTES, &keymu, SEEDBYTES * 2 + CRHBYTES);
   // Expand matrix and transform vectors
+  // println!("rho: {:?}", rho);
   polyvec_matrix_expand(&mut mat, &rho);
+  // for i in 0..K {
+    // for j in 0..L {
+      // println!("mat[{}].vec[{}] {:?}", i, j, mat[i].vec[j].coeffs);
+    // }
+  // }
   polyvecl_ntt(&mut s1);
   polyveck_ntt(&mut s2);
   polyveck_ntt(&mut t0);
 
+  println!("rho_prime: {:?}", rhoprime);
+  // println!("mu: {:?}", &keymu[SEEDBYTES * 2..]);
   loop {
     // Sample intermediate vector y
     polyvecl_uniform_gamma1(&mut y, &rhoprime, nonce);
+    if nonce == 0 {
+      println!("y.vec[2]: {:?}", y.vec[2].coeffs);
+    }
     nonce += 1;
 
     // Matrix-vector multiplication
     let mut z = y;
+    // for i in 0..L {
+      // println!("z.vec_mae[{}] {:?}", i, z.vec[i].coeffs);
+    // }
     polyvecl_ntt(&mut z);
+    // for i in 0..L {
+      // println!("z.vec_ato[{}] {:?}", i, z.vec[i].coeffs);
+    // }
     polyvec_matrix_pointwise_montgomery(&mut w1, &mat, &z);
+    // for i in 0..K {
+      // println!("w1.vec_mae[{}] {:?}", i, w1.vec[i].coeffs);
+    // }
     // polyveck_reduce(&mut w1);
     polyveck_invntt_tomont(&mut w1);
-
+    // for i in 0..K {
+      // println!("w1.vec_ato[{}] {:?}", i, w1.vec[i].coeffs);
+    // }
     // Decompose w and call the random oracle
     polyveck_caddq(&mut w1);
     polyveck_decompose(&mut w1, &mut w0);
+    // for i in 0..K {
+      // println!("w1.vec_ato_ato[{}] {:?}", i, w1.vec[i].coeffs);
+    // }
+    // for i in 0..K {
+      // println!("w0.vec[{}] {:?}", i, w0.vec[i].coeffs);
+    // }
     polyveck_pack_w1(sig, &w1);
 
     state.init();
     // TODO: ここもFIPS204と異なる
-    shake256_absorb(&mut state, &keymu[SEEDBYTES*2..], CRHBYTES);
+    // if nonce == 1{
+    //   println!("keymu[SEEDBYTES * 2..]: {:?}", &keymu[SEEDBYTES * 2..]);
+    //   // println!("sig: {:?}", sig[0..K * POLYW1_PACKEDBYTES]);
+    //   print!("sig = [");
+    //   for i in 0.. K* POLYW1_PACKEDBYTES {
+    //     print!("{:?}, ", sig[i]);
+    //   }
+    //   println!("]");
+    // }
+    shake256_absorb(&mut state, &keymu[SEEDBYTES * 2..], CRHBYTES);
+    // if nonce == 1 {
+    //   println!("after keymu absorbed");
+    //   println!("state.s: {:?}", state.s);
+    //   println!("state.pos: {:?}", state.pos);
+    // }
     shake256_absorb(&mut state, &sig, K * POLYW1_PACKEDBYTES);
+    // if nonce == 1 {
+    //   println!("after w1 packed absorbed");
+    //   println!("state.s: {:?}", state.s);
+    //   println!("state.pos: {:?}", state.pos);
+    //   println!("go to finalize");
+    // }
     shake256_finalize(&mut state);
-    shake256_squeeze(sig, 2*LAMBDA, &mut state);
+    // if nonce == 1 {
+    //   println!("state.s: {:?}", state.s);
+    //   println!("state.pos: {:?}", state.pos);
+    // }
+    shake256_squeeze(sig, 2 * LAMBDA, &mut state);
+    // println!("sig_out: {:?}", sig[0..2 * LAMBDA]);
+    // if nonce == 1 {
+    //   print!("sig_out = [");
+    //   for i in 0..2 * LAMBDA {
+    //     print!("{:?}, ", sig[i]);
+    //   }
+    //   println!("]");
+    // }
     poly_challenge(&mut cp, sig);
+    println!("cp: {:?}", cp.coeffs);
     poly_ntt(&mut cp);
 
     // Compute z, reject if it reveals secret
@@ -157,7 +251,7 @@ pub fn crypto_sign_signature(sig: &mut [u8], m: &[u8], sk: &[u8]) {
     /* Check that subtracting cs2 does not change high bits of w and low bits
      * do not reveal secret information */
     polyveck_pointwise_poly_montgomery(&mut h, &cp, &s2);
-    polyveck_invntt_tomont(&mut h);//intt(ntt(cs2))
+    polyveck_invntt_tomont(&mut h); //intt(ntt(cs2))
     polyveck_sub(&mut w0, &h);
     polyveck_reduce(&mut w0);
     if polyveck_chknorm(&w0, (GAMMA2 - BETA) as i32) > 0 {
@@ -192,8 +286,8 @@ pub fn crypto_sign_verify(
   let mut buf = [0u8; K * POLYW1_PACKEDBYTES];
   let mut rho = [0u8; SEEDBYTES];
   let mut mu = [0u8; CRHBYTES];
-  let mut c = [0u8; 2*LAMBDA];
-  let mut c2 = [0u8; 2*LAMBDA];
+  let mut c = [0u8; 2 * LAMBDA];
+  let mut c2 = [0u8; 2 * LAMBDA];
   let mut cp = Poly::default();
   let (mut mat, mut z) = ([Polyvecl::default(); K], Polyvecl::default());
   let (mut t1, mut w1, mut h) = (
@@ -211,6 +305,7 @@ pub fn crypto_sign_verify(
   if let Err(e) = unpack_sig(&mut c, &mut z, &mut h, sig) {
     return Err(e);
   }
+  polyvecl_reduce(&mut z);
   if polyvecl_chknorm(&z, (GAMMA1 - BETA) as i32) > 0 {
     return Err(SignError::Input);
   }
@@ -249,7 +344,7 @@ pub fn crypto_sign_verify(
   shake256_absorb(&mut state, &mu, CRHBYTES);
   shake256_absorb(&mut state, &buf, K * POLYW1_PACKEDBYTES);
   shake256_finalize(&mut state);
-  shake256_squeeze(&mut c2, 2*LAMBDA, &mut state);
+  shake256_squeeze(&mut c2, 2 * LAMBDA, &mut state);
   // Doesn't require constant time equality check
   if c != c2 {
     Err(SignError::Verify)
