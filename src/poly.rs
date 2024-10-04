@@ -35,6 +35,9 @@ pub fn poly_caddq(a: &mut Poly) {
 pub fn poly_add(c: &mut Poly, b: &Poly) {
   for i in 0..N {
     c.coeffs[i] = c.coeffs[i] + b.coeffs[i];
+    if c.coeffs[i] >= Q as i32 {
+      c.coeffs[i] -= Q as i32;
+    }
   }
 }
 
@@ -141,6 +144,7 @@ pub fn poly_chknorm(a: &Poly, b: i32) -> u8 {
     t = a.coeffs[i] - (t & 2 * a.coeffs[i]);
 
     if t >= b {
+      println!("a.coeffs[{}] = {}", i, a.coeffs[i]);
       return 1;
     }
   }
@@ -387,6 +391,11 @@ pub fn polyeta_pack(r: &mut [u8], a: &Poly) {
       t[6] = (ETA_I32 - a.coeffs[8 * i + 6]) as u8;
       t[7] = (ETA_I32 - a.coeffs[8 * i + 7]) as u8;
 
+      // for j in 0..8 {
+      //   print!("{}, ", t[j]);
+      // }
+      // println!();
+
       r[3 * i + 0] = (t[0] >> 0) | (t[1] << 3) | (t[2] << 6);
       r[3 * i + 1] = (t[2] >> 2) | (t[3] << 1) | (t[4] << 4) | (t[5] << 7);
       r[3 * i + 2] = (t[5] >> 1) | (t[6] << 2) | (t[7] << 5);
@@ -481,6 +490,10 @@ pub fn polyt0_pack(r: &mut [u8], a: &Poly) {
     t[5] = D_SHL - a.coeffs[8 * i + 5];
     t[6] = D_SHL - a.coeffs[8 * i + 6];
     t[7] = D_SHL - a.coeffs[8 * i + 7];
+    // for j in 0..8 {
+        // print!("{}, ", t[j]);
+    // }
+    // println!();
 
     r[13 * i + 0] = (t[0]) as u8;
     r[13 * i + 1] = (t[0] >> 8) as u8;
@@ -553,6 +566,12 @@ pub fn polyt0_unpack(r: &mut Poly, a: &[u8]) {
     r.coeffs[8 * i + 5] = D_SHL - r.coeffs[8 * i + 5];
     r.coeffs[8 * i + 6] = D_SHL - r.coeffs[8 * i + 6];
     r.coeffs[8 * i + 7] = D_SHL - r.coeffs[8 * i + 7];
+
+    for j in 0..8 {
+      if r.coeffs[8 * i + j] < 0 {
+        r.coeffs[8 * i + j] = r.coeffs[8 * i + j] + Q as i32;
+      }
+    }
   }
 }
 

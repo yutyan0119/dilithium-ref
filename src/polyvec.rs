@@ -133,6 +133,7 @@ pub fn polyvecl_pointwise_acc_montgomery(
 pub fn polyvecl_chknorm(v: &Polyvecl, bound: i32) -> u8 {
   for i in 0..L {
     if poly_chknorm(&v.vec[i], bound) > 0 {
+      println!("l_index {}", i);
       return 1;
     }
   }
@@ -224,6 +225,7 @@ pub fn polyveck_pointwise_poly_montgomery(
 pub fn polyveck_chknorm(v: &Polyveck, bound: i32) -> u8 {
   for i in 0..K {
     if poly_chknorm(&v.vec[i], bound) > 0 {
+      println!("k_index {}", i);
       return 1;
     }
   }
